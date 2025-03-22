@@ -1,0 +1,14 @@
+{
+    "ruta_calificaciones": "./Calificaciones",
+    "ruta_estudiantes": "./Lista de estudiantes",
+    "archivo_salida": "reporte_final.csv",
+    "columnas_calificaciones": {
+        "correo": "Dirección de correo",
+        "calificacion": "Calificación/10,00"
+    },
+    "columnas_estudiantes": {
+        "correo": "Dirección de correo",
+        "nombre": "Nombre",
+        "apellido": "Apellido(s)"
+    }
+}
