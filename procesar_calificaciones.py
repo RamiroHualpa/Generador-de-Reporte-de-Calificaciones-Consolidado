@@ -17,6 +17,10 @@ def limpiar_nombre_archivo(nombre):
     match = re.search(r'Cuestionario(?: de)? (.*?) -', nombre)
     return match.group(1) if match else nombre
 
+def extraer_regional(grupos):
+    grupos_lista = [g.strip() for g in grupos.split(",")]
+    return next((g for g in grupos_lista if not re.match(r'M\d{4}-\d{2}', g)), grupos_lista[-1])
+
 def leer_calificaciones(ruta, columnas):
     calificaciones = defaultdict(dict)
     archivos = [f for f in os.listdir(ruta) if f.endswith(".csv")]
@@ -30,20 +34,21 @@ def leer_calificaciones(ruta, columnas):
         try:
             with open(ruta_completa, newline='', encoding='utf-8') as csvfile:
                 reader = csv.DictReader(csvfile)
-                columnas_detectadas = reader.fieldnames
-                print(f"Columnas detectadas en {archivo}: {columnas_detectadas}")
                 
-                if columnas["correo"] not in columnas_detectadas or columnas["calificacion"] not in columnas_detectadas:
-                    print(f"Advertencia: Archivo {archivo} no contiene las columnas esperadas. Se omitirá.")
+                if columnas["correo"] not in reader.fieldnames or columnas["calificacion"] not in reader.fieldnames:
                     continue
                 
                 for row in reader:
-                    try:
-                        correo = row[columnas["correo"]].strip().lower()
-                        calificacion = row.get(columnas["calificacion"], "-")
-                        calificaciones[correo][nombre_limpio] = calificacion
-                    except KeyError as e:
-                        print(f"Error procesando fila en {archivo}: {e}")
+                    correo = row[columnas["correo"]].strip().lower()
+                    calificacion = row.get(columnas["calificacion"], "-")
+                    
+                    if calificacion not in ["-"]:
+                        try:
+                            calificacion = round(float(calificacion.replace(",", ".")))
+                        except ValueError:
+                            calificacion = "-"
+                    
+                    calificaciones[correo][nombre_limpio] = calificacion
         except Exception as e:
             print(f"Error al leer el archivo {archivo}: {e}")
     
@@ -51,41 +56,33 @@ def leer_calificaciones(ruta, columnas):
 
 def leer_estudiantes(ruta, columnas):
     estudiantes = {}
-    
     try:
         archivo_lista = [f for f in os.listdir(ruta) if f.endswith(".csv")][0]
         ruta_completa = os.path.join(ruta, archivo_lista)
         
-        # Cambiar encoding a 'utf-8-sig' para remover el BOM
-        with open(ruta_completa, newline='', encoding='utf-8-sig') as csvfile:  # <- Corrección aquí
+        with open(ruta_completa, newline='', encoding='utf-8-sig') as csvfile:
             reader = csv.DictReader(csvfile)
-            columnas_detectadas = reader.fieldnames
-            print(f"Columnas detectadas en {archivo_lista}: {columnas_detectadas}")
             
-            # Verificar columnas sin BOM
-            if (columnas["correo"] not in columnas_detectadas or 
-                columnas["nombre"] not in columnas_detectadas or 
-                columnas["apellido"] not in columnas_detectadas):
-                print(f"Advertencia: Archivo {archivo_lista} no contiene las columnas esperadas. Se omitirá.")
+            if (columnas["correo"] not in reader.fieldnames or 
+                columnas["nombre"] not in reader.fieldnames or 
+                columnas["apellido"] not in reader.fieldnames or
+                "Grupos" not in reader.fieldnames):
                 return estudiantes
             
             for row in reader:
-                try:
-                    correo = row[columnas["correo"]].strip().lower()
-                    nombre = row[columnas["nombre"]].strip().title()
-                    apellido = row[columnas["apellido"]].strip().title()
-                    estudiantes[correo] = {"Nombre": nombre, "Apellido": apellido}
-                except KeyError as e:
-                    print(f"Error procesando fila en {archivo_lista}: {e}")
-    except IndexError:
-        print("Error: No se encontró ningún archivo de estudiantes en la ruta especificada.")
+                correo = row[columnas["correo"].strip()].lower()
+                nombre = row[columnas["nombre"].strip()].title()
+                apellido = row[columnas["apellido"].strip()].title()
+                regional = extraer_regional(row["Grupos"].strip())
+                
+                estudiantes[correo] = {"Regional": regional, "Nombre": nombre, "Apellido": apellido}
     except Exception as e:
         print(f"Error al leer el archivo de estudiantes: {e}")
     
     return estudiantes
 
 def generar_reporte(estudiantes, calificaciones, nombres_archivos, salida):
-    encabezado = ["Nombre", "Apellido", "Correo"] + nombres_archivos
+    encabezado = ["Regional", "Nombre", "Apellido", "Correo"] + nombres_archivos
     
     try:
         with open(salida, mode='w', newline='', encoding='utf-8') as csvfile:
@@ -93,7 +90,7 @@ def generar_reporte(estudiantes, calificaciones, nombres_archivos, salida):
             writer.writerow(encabezado)
             
             for correo, datos in estudiantes.items():
-                fila = [datos["Nombre"], datos["Apellido"], correo]
+                fila = [datos["Regional"], datos["Nombre"], datos["Apellido"], correo]
                 fila += [calificaciones[correo].get(nombre, "-") for nombre in nombres_archivos]
                 writer.writerow(fila)
         
